@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
@@ -21,6 +22,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var recorder: MediaRecorder? = null
+    private var player: MediaPlayer? = null
     private var fileName = ""
     private var state = State.RELEASE
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +32,12 @@ class MainActivity : AppCompatActivity() {
 
         fileName = "${externalCacheDir?.absolutePath}/audiorecordtest.3gp"
 
+        initRecordBtn()
+        initPlayBtn()
+        initStopBtn()
+    }
+
+    private fun initRecordBtn() {
         binding.btnRecord.setOnClickListener {
             when (state) {
                 State.PLAYING -> {
@@ -44,9 +52,40 @@ class MainActivity : AppCompatActivity() {
                     onRecord(false)
                 }
             }
-
         }
     }
+
+    private fun initPlayBtn() {
+        binding.btnPlay.setOnClickListener {
+            when (state) {
+                State.RELEASE -> {
+                    onPlay(true)
+                }
+
+                else -> {
+                    // do nothing
+                }
+            }
+        }
+    }
+
+    private fun initStopBtn() {
+        binding.btnStop.setOnClickListener {
+            when (state) {
+                State.PLAYING -> {
+                    onPlay(false)
+                }
+
+                else -> {
+                    // do nothing
+                }
+            }
+        }
+    }
+
+    private fun onRecord(start: Boolean) = if (start) startRecording() else stopRecording()
+
+    private fun onPlay(start: Boolean) = if (start) startPlaying() else stopPlaying()
 
     private fun record() {
         when {
@@ -131,12 +170,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onRecord(start: Boolean) = if (start) {
-        startRecording()
-    } else {
-        stopRecording()
-    }
-
     private fun stopRecording() {
         recorder?.apply {
             stop()
@@ -155,10 +188,10 @@ class MainActivity : AppCompatActivity() {
     private fun startRecording() {
         state = State.RECORDING
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            recorder = MediaRecorder(this)
+        recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(this)
         } else {
-            recorder = MediaRecorder()
+            MediaRecorder()
         }
         recorder?.apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
@@ -185,6 +218,36 @@ class MainActivity : AppCompatActivity() {
             ColorStateList.valueOf(ContextCompat.getColor(this, R.color.black))
         binding.btnPlay.isEnabled = false
         binding.btnPlay.alpha = 0.3f
+    }
+
+    private fun startPlaying() {
+        state = State.PLAYING
+
+        player = MediaPlayer().apply {
+            try {
+                setDataSource(fileName)
+                prepare()
+            } catch (e: IOException) {
+                Log.e("APP", "media player prepare() failed")
+            }
+            start()
+        }
+
+        player?.setOnCompletionListener {
+            stopPlaying()
+        }
+
+        binding.btnRecord.isEnabled = false
+        binding.btnRecord.alpha = 0.3f
+    }
+
+    private fun stopPlaying() {
+        state = State.RELEASE
+
+        player?.release()
+        player = null
+        binding.btnRecord.isEnabled = true
+        binding.btnRecord.alpha = 1.0f
     }
 
     companion object {
