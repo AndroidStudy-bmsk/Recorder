@@ -1,50 +1,75 @@
 package org.bmsk.recorder
 
-import android.content.pm.PackageManager
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import org.bmsk.recorder.databinding.ActivityMainBinding
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import org.bmsk.recorder.databinding.ActivityMainBinding
+import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-
+    private var recorder: MediaRecorder? = null
+    private var fileName = ""
+    private var state = State.RELEASE
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         binding = ActivityMainBinding.inflate(layoutInflater)
-
         setContentView(binding.root)
 
+        fileName = "${externalCacheDir?.absolutePath}/audiorecordtest.3gp"
+
         binding.btnRecord.setOnClickListener {
-            when {
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.RECORD_AUDIO
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    // todo 이제 실제로 녹음을 시작할 수 있음.
+            when (state) {
+                State.PLAYING -> {
+
                 }
 
-                ActivityCompat.shouldShowRequestPermissionRationale(
-                    this,
-                    Manifest.permission.RECORD_AUDIO
-                ) -> {
-                    showPermissionRationalDialog()
+                State.RELEASE -> {
+                    record()
                 }
 
-                else -> {
-                    ActivityCompat.requestPermissions(
-                        this, arrayOf(Manifest.permission.RECORD_AUDIO),
-                        REQUEST_RECORD_AUDIO_CODE
-                    )
+                State.RECORDING -> {
+                    onRecord(false)
                 }
+            }
+
+        }
+    }
+
+    private fun record() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // 이제 실제로 녹음을 시작할 수 있음.
+                onRecord(true)
+            }
+
+            ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) -> {
+                showPermissionRationalDialog()
+            }
+
+            else -> {
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.RECORD_AUDIO),
+                    REQUEST_RECORD_AUDIO_CODE
+                )
             }
         }
     }
@@ -93,8 +118,8 @@ class MainActivity : AppCompatActivity() {
                 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
 
         if (audioRecordPermissionGranted) {
-            // todo 녹음 작업을 시작.
-
+            // 녹음 작업을 시작.
+            onRecord(true)
         } else {
             if (ActivityCompat.shouldShowRequestPermissionRationale(
                     this,
@@ -106,7 +131,70 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun onRecord(start: Boolean) = if (start) {
+        startRecording()
+    } else {
+        stopRecording()
+    }
+
+    private fun stopRecording() {
+        recorder?.apply {
+            stop()
+            release()
+        }
+        recorder = null
+        state = State.RELEASE
+
+        binding.btnRecord.setImageDrawable(ContextCompat.getDrawable(this, R.drawable.ic_record))
+        binding.btnRecord.imageTintList =
+            ColorStateList.valueOf(ContextCompat.getColor(this, R.color.red))
+        binding.btnPlay.alpha = 1.0f
+        binding.btnPlay.isEnabled = true
+    }
+
+    private fun startRecording() {
+        state = State.RECORDING
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            recorder = MediaRecorder(this)
+        } else {
+            recorder = MediaRecorder()
+        }
+        recorder?.apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+            setOutputFile(fileName)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+
+            try {
+                prepare()
+            } catch (e: IOException) {
+                Log.e("APP", "prepare() failed")
+            }
+
+            start()
+        }
+
+        binding.btnRecord.setImageDrawable(
+            ContextCompat.getDrawable(
+                this,
+                R.drawable.ic_stop
+            )
+        )
+        binding.btnRecord.imageTintList =
+            ColorStateList.valueOf(ContextCompat.getColor(this, R.color.black))
+        binding.btnPlay.isEnabled = false
+        binding.btnPlay.alpha = 0.3f
+    }
+
     companion object {
         private const val REQUEST_RECORD_AUDIO_CODE = 100
+    }
+
+    // 상태관리가 필요함
+    // 릴리즈 -> 녹음중 -> 저장(릴리즈)
+    // 릴리즈 -> 재생 -> 릴리즈
+    private enum class State {
+        RELEASE, RECORDING, PLAYING
     }
 }
