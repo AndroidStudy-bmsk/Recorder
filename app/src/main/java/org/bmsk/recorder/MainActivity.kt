@@ -18,13 +18,16 @@ import androidx.core.content.ContextCompat
 import org.bmsk.recorder.databinding.ActivityMainBinding
 import java.io.IOException
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), OnTimerTickListener {
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var timer: Timer
+
     private var recorder: MediaRecorder? = null
     private var player: MediaPlayer? = null
     private var fileName = ""
     private var state = State.RELEASE
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -32,6 +35,7 @@ class MainActivity : AppCompatActivity() {
 
         fileName = "${externalCacheDir?.absolutePath}/audiorecordtest.3gp"
 
+        timer = Timer(this)
         initRecordBtn()
         initPlayBtn()
         initStopBtn()
@@ -178,6 +182,8 @@ class MainActivity : AppCompatActivity() {
         recorder = null
         state = State.RELEASE
 
+        timer.stop()
+
         binding.btnRecord.setImageDrawable(ContextCompat.getDrawable(this, R.drawable.ic_record))
         binding.btnRecord.imageTintList =
             ColorStateList.valueOf(ContextCompat.getColor(this, R.color.red))
@@ -208,6 +214,9 @@ class MainActivity : AppCompatActivity() {
             start()
         }
 
+        binding.vWaveForm.clearData()
+        timer.start()
+
         binding.btnRecord.setImageDrawable(
             ContextCompat.getDrawable(
                 this,
@@ -233,6 +242,9 @@ class MainActivity : AppCompatActivity() {
             start()
         }
 
+        binding.vWaveForm.clearWave()
+        timer.start()
+
         player?.setOnCompletionListener {
             stopPlaying()
         }
@@ -246,8 +258,25 @@ class MainActivity : AppCompatActivity() {
 
         player?.release()
         player = null
+
+        timer.stop()
+
         binding.btnRecord.isEnabled = true
         binding.btnRecord.alpha = 1.0f
+    }
+
+    override fun onTick(duration: Long) {
+        val millisecond = duration % 1000
+        val second = (duration / 1000) % 60
+        val minute = (duration / 1000) / 60
+
+        binding.tvTimer.text = String.format("%02d:%02d.%02d", minute, second, millisecond / 10)
+
+        if(state == State.PLAYING) {
+            binding.vWaveForm.replayAmplitude()
+        } else if(state == State.RECORDING) {
+            binding.vWaveForm.addAmplitude(recorder?.maxAmplitude?.toFloat() ?: 0f)
+        }
     }
 
     companion object {
